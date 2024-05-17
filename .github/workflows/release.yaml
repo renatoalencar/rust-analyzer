@@ -182,6 +182,51 @@ jobs:
           name: dist-x86_64-unknown-linux-musl
           path: ./dist
 
+  dist-x86_64-unknown-freebsd:
+    name: dist (x86_64-unknown-freebsd)
+    runs-on: ubuntu-latest
+    env:
+      RA_TARGET: x86_64-unknown-freebsd
+      # For some reason `-crt-static` is not working for clang without lld
+      RUSTFLAGS: "-C link-arg=-fuse-ld=lld -C target-feature=-crt-static"
+    container:
+      image: rust:alpine
+      volumes:
+        - /usr/local/cargo/registry:/usr/local/cargo/registry
+
+    steps:
+      - name: Install dependencies
+        run: apk add --no-cache git clang lld musl-dev nodejs npm
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ env.FETCH_DEPTH }}
+
+      - name: Dist
+        run: cargo xtask dist --client-patch-version ${{ github.run_number }}
+
+      - run: npm ci
+        working-directory: editors/code
+
+      - name: Package Extension (release)
+        if: github.ref == 'refs/heads/release'
+        run: npx vsce package -o "../../dist/rust-analyzer-alpine-x64.vsix" --target alpine-x64
+        working-directory: editors/code
+
+      - name: Package Extension (nightly)
+        if: github.ref != 'refs/heads/release'
+        run: npx vsce package -o "../../dist/rust-analyzer-alpine-x64.vsix" --target alpine-x64 --pre-release
+        working-directory: editors/code
+
+      - run: rm -rf editors/code/server
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v1
+        with:
+          name: dist-x86_64-unknown-freebsd
+          path: ./dist
+
   publish:
     name: publish
     runs-on: ubuntu-latest
